@@ -30,6 +30,7 @@ issuance gaps are tracked on quasar: #71 (per-user session issuance),
 
 ```
 quasar-auth.asd        auth client + entitlement policy (no quasar deps)
+quasar-auth-host.asd   discoverable bridge system (depends on quasar-web)
 src/                   quasar-auth sources
 t/                     quasar-auth tests (plain runner, no framework)
 host/                  quasar-auth-host bridge, loaded inside the quasar image
@@ -81,6 +82,10 @@ sbcl --noinform --non-interactive \
   --eval '(asdf:load-system :quasar-auth)' \
   --eval '(asdf:test-system :quasar-auth)'
 ```
+
+Run `asdf:test-system :quasar-auth-host` from a Quasar environment to
+compile the bridge and exercise a login against a fake auth transport and a
+real `quasar.ws:websocket-server` session table.
 
 ## Security model
 

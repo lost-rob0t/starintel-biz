@@ -37,7 +37,7 @@ can substitute a fake without loading the full quasar image.")
       (ignore-errors
         (jsown:parse (babel:octets-to-string data))))))
 
-(defun register-session (session entitlement)
+(defun register-session (entitlement)
   "Register a quasar websocket session for ENTITLEMENT and return the
 minted token. Quasar enforces workspaces/capabilities per connection."
   (let ((token (quasar-auth:mint-session-token)))
@@ -52,20 +52,23 @@ minted token. Quasar enforces workspaces/capabilities per connection."
           token)
     token))
 
-(defun handle-login (body)
+(defun handle-login (body &key (request-fn (quasar-auth:make-request-fn)))
   "Core handler: BODY is a parsed {\"username\",\"password\"} JSON object.
 
 Returns a clack-style response. On success the JSON carries ONLY the minted
 quasar session token; the starintel-server api_key stays server-side."
   (flet ((bad (code message)
            (error-response 400 code message)))
-    (unless body (bad "invalid_request" "JSON body required."))
+    (unless body
+      (return-from handle-login
+        (bad "invalid_request" "JSON body required.")))
     (let ((username (ignore-errors (jsown:val body "username")))
           (password (ignore-errors (jsown:val body "password"))))
       (unless (and (stringp username) (stringp password))
-        (bad "invalid_request" "username and password strings required."))
+        (return-from handle-login
+          (bad "invalid_request" "username and password strings required.")))
       (multiple-value-bind (session failure)
-          (quasar-auth:login username password)
+          (quasar-auth:login username password :request-fn request-fn)
         (cond
           ((null session)
            (error-response 401
@@ -80,7 +83,7 @@ quasar session token; the starintel-server api_key stays server-side."
                                 (quasar-auth:login-failure-code failure)
                                 (quasar-auth:login-failure-message failure)))
                (t
-                (let ((token (register-session session entitlement)))
+                 (let ((token (register-session entitlement)))
                   (json-response
                    200
                    (jsown:new-js

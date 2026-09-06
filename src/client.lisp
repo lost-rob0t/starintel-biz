@@ -41,21 +41,33 @@ host bridge."
 
 CONTENT is a JSON string or NIL; PATH is relative to BASE-URL. Transport
 errors signal; starintel-server status codes come back as integers."
-  (lambda (method path content)
-    (multiple-value-bind (body status)
-        (dexador:request
-         (quri:render-uri (quri:merge-uris (quri:uri path) (quri:uri base-url)))
-         :method method
-         :content (and content (babel:string-to-octets content))
-         :content-type "application/json"
-         :connect-timeout 5
-         :read-timeout *request-timeout*
-         :keep-alive nil)
-      (let ((text (and body (babel:octets-to-string body))))
-        (values
-         status
-         (and text (plusp (length text))
-              (ignore-errors (jsown:parse text))))))))
+  (labels ((parse-body (body)
+             (let ((text (typecase body
+                           (string body)
+                           ((vector (unsigned-byte 8))
+                            (babel:octets-to-string body))
+                           (t nil))))
+               (and text (plusp (length text))
+                    (ignore-errors (jsown:parse text)))))
+           (request (method path content)
+             (dexador:request
+              (quri:render-uri
+               (quri:merge-uris (quri:uri path) (quri:uri base-url)))
+              :method method
+              :content content
+              :headers '(("Content-Type" . "application/json"))
+              :force-string t
+              :connect-timeout 5
+              :read-timeout *request-timeout*
+              :keep-alive nil)))
+    (lambda (method path content)
+      (handler-case
+          (multiple-value-bind (body status)
+              (request method path content)
+            (values status (parse-body body)))
+        (dex:http-request-failed (condition)
+          (values (dex:response-status condition)
+                  (parse-body (dex:response-body condition))))))))
 
 (defun valid-username-p (username)
   "1..32 chars of [a-z0-9._-] starting alphanumeric; restricted so the value
